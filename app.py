@@ -3,7 +3,9 @@ import google.generativeai as genai
 from langchain_community.llms.huggingface_endpoint import HuggingFaceEndpoint
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.prompts import PromptTemplate
+from langchain_community.tools import DuckDuckGoSearchRun
 import os
+import time
 
 # Streamlit page configuration
 st.set_page_config(page_title="AI Tool", page_icon=":robot:")
@@ -64,29 +66,37 @@ if api_key:
     # Button to submit the question
     button2 = st.button("Submit")
 
-    # Search tool integration (DuckDuckGo)
+    # Search tool integration (DuckDuckGo from langchain_community.tools)
+    search_tool = DuckDuckGoSearchRun()
 
-    from phi.assistant import Assistant
-    from phi.tools.duckduckgo import DuckDuckGo
+    # Function to retry the search in case of rate limit
+    def get_search_result(question, retries=3, delay=5):
+        for attempt in range(retries):
+            try:
+                return search_tool.run(question)
+            except Exception as e:
+                st.warning(f"Rate limit reached or other error occurred: {str(e)}")
+                if attempt < retries - 1:
+                    st.info(f"Retrying in {delay} seconds... (Attempt {attempt + 1} of {retries})")
+                    time.sleep(delay)
+                else:
+                    st.error("Max retries reached. Please try again later.")
+                    return None
 
-    # Initialize the search tool
-    search_tool = Assistant(tools=[DuckDuckGo()], show_tool_calls=True)
-
-    # Check if a question has been entered
+    # Run the search if a question is provided
     if question:
-        search_result = search_tool.run(question)  # Adjusted from 'print_response' to 'run'
+        search_result = get_search_result(question)
 
-    # Create the prompt using the search result
+    # Prompt template for the model
     template = """You are an AI assistant. Provide relevant answers to the user's question. 
-                The user's question is: {question}. 
-                If the user asks about current affairs, use the DuckDuckGo search result as context. 
-                The DuckDuckGo search result is: {search}"""
+                  The user's question is: {question}. 
+                  If the user asks about current affairs, use the DuckDuckGo search result as context. 
+                  The DuckDuckGo search result is: {search}"""
 
     example_prompt = PromptTemplate(input_variables=["question", "search"], template=template)
     prompt = example_prompt.format(question=question, search=search_result)
 
-
     # If the submit button is clicked, get the response from the selected model
-    if button2:
+    if button2 and search_result:  # Ensure search result is not None
         response = get_llm_response(st.session_state["api_key"])
         st.write(response)
