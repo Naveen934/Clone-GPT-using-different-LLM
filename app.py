@@ -30,25 +30,35 @@ def get_api_key():
     return st.session_state["api_key"]
 
 # Function to interact with HuggingFace models
-def invoke_hugging_llm(model_name, api_key):
+def invoke_hugging_llm(model_name, api_key, prompt):
     os.environ["HUGGINGFACEHUB_API_TOKEN"] = api_key
     llm = HuggingFaceEndpoint(repo_id=model_name)
     response = llm.invoke(prompt)
     return response
 
-# Function to get the model's response based on the selected LLM
-def get_llm_response(api_key):
-    if model == "Mistral":
-        model_name = "mistralai/Mistral-7B-Instruct-v0.3"
-        response = invoke_hugging_llm(model_name, api_key)
-    elif model == "Llama":
-        model_name = "meta-llama/Meta-Llama-3-8B-Instruct"
-        response = invoke_hugging_llm(model_name, api_key)
-    elif model == "Gemini":
-        os.environ['GOOGLE_API_KEY'] = api_key
-        genai.configure(api_key=os.environ['GOOGLE_API_KEY'])
-        llm = ChatGoogleGenerativeAI(model="gemini-pro", temperature=0.3)
-        response = llm.invoke(prompt).content
+import logging
+logging.basicConfig(level=logging.DEBUG)
+
+def get_llm_response(api_key, prompt):
+    logging.debug(f"Using API key: {api_key}")
+    logging.debug(f"Prompt: {prompt}")
+    try:
+        if model == "Mistral":
+            model_name = "mistralai/Mistral-7B-Instruct-v0.3"
+            response = invoke_hugging_llm(model_name, api_key, prompt)
+        elif model == "Llama":
+            model_name = "meta-llama/Meta-Llama-3-8B-Instruct"
+            response = invoke_hugging_llm(model_name, api_key, prompt)
+        elif model == "Gemini":
+            os.environ['GOOGLE_API_KEY'] = api_key
+            genai.configure(api_key=os.environ['GOOGLE_API_KEY'])
+            llm = ChatGoogleGenerativeAI(model="gemini-pro", temperature=0.3)
+            response = llm.invoke(prompt)
+            logging.debug(f"Gemini response: {response}")
+            return response.content
+    except Exception as e:
+        logging.error(f"Error invoking model: {e}")
+        raise e
     return response
 
 # Get API key
@@ -72,8 +82,13 @@ if api_key:
     search_tool = Assistant(tools=[DuckDuckGo()], show_tool_calls=True)
 
     # Check if a question has been entered
+    search_result = None
     if question:
-        search_result = search_tool.run(question)  # Adjusted from 'print_response' to 'run'
+        try:
+            search_result = search_tool.run(question)  # Adjusted from 'print_response' to 'run'
+        except Exception as e:
+            st.error(f"Error performing search: {str(e)}")
+            search_result = "No search results found."
 
     # Create the prompt using the search result
     template = """You are an AI assistant. Provide relevant answers to the user's question. 
@@ -84,7 +99,10 @@ if api_key:
     example_prompt = PromptTemplate(input_variables=["question", "search"], template=template)
     prompt = example_prompt.format(question=question, search=search_result)
 
-        # If the submit button is clicked, get the response from the selected model
+    # If the submit button is clicked, get the response from the selected model
     if button2:
-        response = get_llm_response(st.session_state["api_key"])
-        st.write(response)
+        if search_result:
+            response = get_llm_response(st.session_state["api_key"], prompt)
+            st.write(response)
+        else:
+            st.warning("Please enter a valid question to search.")
