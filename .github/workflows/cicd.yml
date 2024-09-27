@@ -1,4 +1,4 @@
-name: Streamlit CI/CD
+name: Streamlit GPT App CI/CD
 
 on:
   push:
@@ -11,12 +11,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v2
-
+    
     # Set up Python environment
     - name: Set up Python
       uses: actions/setup-python@v2
       with:
-        python-version: '3.12'
+        python-version: '3.9'
         
     # Install dependencies
     - name: Install dependencies
@@ -24,7 +24,13 @@ jobs:
         python -m pip install --upgrade pip
         pip install -r requirements.txt
 
-    # Run the tests with pytest
+    # Ensure environment variables are set for API keys (mocked in tests)
+    - name: Mock API Keys (For Testing)
+      run: |
+        echo "HUGGINGFACEHUB_API_TOKEN=fake-api-key" >> $GITHUB_ENV
+        echo "GOOGLE_API_KEY=fake-google-api-key" >> $GITHUB_ENV
+
+    # Run the tests
     - name: Run tests
       run: |
         pytest
@@ -48,6 +54,6 @@ jobs:
       uses: docker/build-push-action@v2
       with:
         context: .
-        file: ./Dockerfile   # Ensure the file is named 'Dockerfile', not 'DockerFile'
+        file: ./Dockerfile  # Ensure the file is named Dockerfile (case-sensitive)
         push: true
-        tags: ${{ secrets.DOCKER_USERNAME }}/streamlit-app:latest
+        tags: ${{ secrets.DOCKER_USERNAME }}/gpt-streamlit-app:latest
